@@ -1,0 +1,54 @@
+---
+- name: Install containerd
+  yum:
+    name: containerd
+    state: present
+
+- name: Configure containerd
+  shell: |
+    mkdir -p /etc/containerd
+    containerd config default > /etc/containerd/config.toml
+    sed -i '/SystemdCgroup = false/s/false/true/' /etc/containerd/config.toml
+
+- name: Start and enable containerd
+  systemd:
+    name: containerd
+    enabled: yes
+    state: started
+
+- name: Disable swap (Kubernetes requirement)
+  command: swapoff -a
+  become: yes
+
+- name: Ensure swap remains off
+  lineinfile:
+    path: /etc/fstab
+    regexp: '.*swap.*'
+    state: absent
+
+- name: Install Kubernetes dependencies
+  yum:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Start and enable kubelet
+  systemd:
+    name: kubelet
+    enabled: yes
+    state: started
+
+- name: Initialize Kubernetes Controller
+  command: kubeadm init --pod-network-cidr=10.244.0.0/16 --cri-socket=/run/containerd/containerd.sock
+
+- name: Configure kubectl for the admin user
+  shell: |
+    mkdir -p $HOME/.kube
+    cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+    chown $(id -u):$(id -g) $HOME/.kube/config
+
+- name: Install Flannel CNI
+  command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml

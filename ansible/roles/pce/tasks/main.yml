@@ -1,0 +1,11 @@
+---
+- name: Install necessary packages on PCE node
+  yum:
+    name: httpd  # Example package, replace with actual PCE software
+    state: present
+
+- name: Start and enable HTTPD service
+  systemd:
+    name: httpd
+    enabled: yes
+    state: started

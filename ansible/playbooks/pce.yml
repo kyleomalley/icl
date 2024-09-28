@@ -1,0 +1,36 @@
+---
+- name: Set up HTTPD to listen on port 8001 and display Hello World
+  hosts: pce_group
+  vars:
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=accept-new'
+  become: True  # Use sudo to install packages
+  tasks:
+    - name: Install httpd
+      package:
+        name: httpd
+        state: present
+  
+    - name: Allow httpd to bind to port 8001 with SELinux
+      ansible.builtin.command: semanage port -a -t http_port_t -p tcp 8001
+      become: True
+      ignore_errors: True  # In case the port is already allowed
+
+    - name: Ensure httpd is configured to listen on port 8001
+      lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: '^Listen '
+        line: 'Listen 8001'
+
+    - name: Ensure httpd is started and enabled
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+
+    - name: Create a simple Hello World HTML page
+      copy:
+        content: "<html><body><h1>Hello, World!</h1></body></html>"
+        dest: /var/www/html/index.html
+        owner: apache
+        group: apache
+        mode: '0644'
