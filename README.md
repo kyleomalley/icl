@@ -1,6 +1,22 @@
-# ICL
+# ICL (Instant Container Lab)
 
-This project automates the provisioning and configuration of an AWS environment using Terraform and Ansible. The setup includes a simple HTTP serving node and a Kubernetes cluster.
+This project automates the provisioning and configuration of an AWS environment using Terraform and Ansible.
+
+## Primary Goals:
+Running `./icl.sh start` will produce the following:
+
+- Automates creating three ec2 nodes, `pce`, `kubernetes-controller`, `kubernetes-worker`
+- Uses Route53 to assign DNS entries (Completed)
+- Configures and stores publicaly trusted TLS certificates on each node. (WIP)
+- Configures an outbound HTTP Proxy (Tinyproxy) on `pce` for use by the Kubernetes cluster nodes. (WIP)
+- Configures Kubernetes and configures outbound proxy. (WIP)
+- Launches a simple "Hello World" container app. (Not started)
+
+Additionally,`icl.sh` should be able to `destroy`, `suspend` and `unsuspend` all created nodes. (Completed)
+
+## Secondary Goals:
+ - Include Ansible Playbooks to install various container-based services.
+    - Illumio PCE. (WIP)
 
 ## Prerequisites
 
@@ -28,15 +44,35 @@ cd icl
 chmod +x icl.sh
 ```
 
-### Update Configuration Variables
-Open icl.sh and update the following variables if necessary:
+### Initalize terraform (first run only)
+```bash
+cd terraform
+terraform init
+```
 
-	•	PROJECT_NAME: The name of your project (default is "icl-dev").
-	•	KEY_NAME: The name of your existing AWS SSH key pair (default is "ssh-dev").
-	•	KEY_PATH: The path to your SSH private key file (default is "~/.ssh/ssh-dev.pem").
-	•	SECURITY_GROUP_NAME: The name of the security group (default is "icl-dev").
-	•	PYTHON_INTERPRETER: The path to the Python interpreter on your EC2 instances (default is "/usr/bin/python3.9").
 
+### Create secrets.tfvars
+
+```secrets.tfvars
+# AWS Credentials
+aws_access_key  = "<>"
+aws_secret_key  = "<>"
+
+# Domain Information
+domain_name     = "<domain.com>"
+hosted_zone_id  = "<aws_zone_id>"
+
+# SSH Key Information
+key_name        = "ssh-dev"
+key_path        = "~/.ssh/ssh-dev.pem"
+
+# Project Information
+project_name    = "icl-dev"
+security_group_name = "icl-dev"
+
+# Python Version https://docs.ansible.com/ansible-core/2.17/reference_appendices/interpreter_discovery.html
+python_interpreter    = "/usr/bin/python3.9"
+```
 
 ### Usage
 
@@ -77,11 +113,6 @@ Use the `icl.sh` script to manage the infrastructure.
     ```bash
     ./icl.sh list_amis
     ```
-
-## HTTP Service on PCE Node
-
-A simple HTTP server is automatically started on the PCE node on port 8080. You can access this service by navigating to `http://<PCE_IP>:8080` after the infrastructure is up and running.
-
 
 ## Generated Files
 

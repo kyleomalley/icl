@@ -20,7 +20,8 @@ export HOSTED_ZONE_ID=$(grep 'hosted_zone_id' $SECRETS_FILE | awk -F ' = ' '{pri
 export KEY_NAME=$(grep 'key_name' $SECRETS_FILE | awk -F ' = ' '{print $2}' | tr -d '"')
 export KEY_PATH=$(grep 'key_path' $SECRETS_FILE | awk -F ' = ' '{print $2}' | tr -d '"')
 export PROJECT_NAME=$(grep 'project_name' $SECRETS_FILE | awk -F ' = ' '{print $2}' | tr -d '"')
-
+export SECURITY_GROUP_NAME=$(grep 'security_group_name' $SECRETS_FILE | awk -F ' = ' '{print $2}' | tr -d '"')
+export PYTHON_INTERPRETER=$(grep 'python_interpreter' $SECRETS_FILE | awk -F ' = ' '{print $2}' | tr -d '"')
 
 # Configure AWS CLI with the extracted credentials
 aws configure set aws_access_key_id $AWS_ACCESS_KEY

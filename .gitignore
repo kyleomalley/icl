@@ -179,3 +179,4 @@ ansible/inventory/hosts
 .terraform/
 terraform/.terraform.lock.hcl
 terraform/.terraform.tfstate.lock.info
+/third_party/rpm/*.rpm

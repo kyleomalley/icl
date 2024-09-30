@@ -17,6 +17,11 @@ variable "security_group_name" {
   type        = string
 }
 
+variable "pce_iam_instance_profile" {
+  description = "The IAM instance profile ARN"
+  type        = string
+}
+
 variable "domain_name" {
   description = "The domain name to use for DNS records"
   type        = string
@@ -57,6 +62,7 @@ resource "aws_instance" "pce" {
   instance_type = "t3.micro"
   key_name      = var.key_name
   security_groups = [var.security_group_name]
+  iam_instance_profile = var.pce_iam_instance_profile
 
   tags = {
     Name    = "pce"
