@@ -7,13 +7,35 @@ Running `./icl.sh start` will produce the following:
 
 - Automates creating three ec2 nodes, `pce`, `kubernetes-controller`, `kubernetes-worker`
 - Uses Route53 to assign DNS entries (Completed)
-- Configures and stores publicaly trusted TLS certificates on each node. (WIP)
+- Configures and stores publicly trusted TLS certificates on each node. (WIP)
 - Configures an outbound HTTP Proxy (Tinyproxy) on `pce` for use by the Kubernetes cluster nodes. (WIP)
 - Configures Kubernetes and configures outbound proxy. (WIP)
 - Launches a simple "Hello World" container app. (Not started)
 
 Additionally,`icl.sh` should be able to `destroy`, `suspend` and `unsuspend` all created nodes. (Completed)
 
+## Architecture Overview
+```mermaid 
+graph TB;
+    AC{{Linux Workstation}} -. "AWS API (Terraform)" .-> AWS((AWS));
+    AC -- "SSH (Ansible) & HTTPS" --> SG{{"*AWS Security Group*"}};
+
+    S3[S3] --> AWS;
+    Route53[Route53] --> AWS;
+    Cert[Cert Manager] --> AWS;
+
+    AWS --> AWS_Instances(AWS Subgraph);
+
+    subgraph AWS_Instances[AWS EC2];
+        EC2_1[pce];
+        EC2_2[K8s_controller];
+        EC2_3[K8s_worker];
+    end;
+    
+    SG --> EC2_1;
+    SG --> EC2_2;
+    SG --> EC2_3;
+```
 ## Secondary Goals:
  - Include Ansible Playbooks to install various container-based services.
     - Illumio PCE. (WIP)
