@@ -8,9 +8,9 @@ Running `./icl.sh start` will produce the following:
 - Automates creating three ec2 nodes, `pce`, `kubernetes-controller`, `kubernetes-worker`
 - Uses Route53 to assign DNS entries (Completed)
 - Configures and stores publicly trusted TLS certificates on each node. (WIP)
-- Configures an outbound HTTP Proxy (Tinyproxy) on `pce` for use by the Kubernetes cluster nodes. (WIP)
+- Configures an outbound HTTP Proxy (Tinyproxy) on `pce` for use by the Kubernetes cluster nodes. (Completed)
 - Configures Kubernetes and configures outbound proxy. (WIP)
-- Launches a simple "Hello World" container app. (Not started)
+- Launches a simple "Hello World" container app. (WIP)
 
 Additionally,`icl.sh` should be able to `destroy`, `suspend` and `unsuspend` all created nodes. (Completed)
 
@@ -66,14 +66,7 @@ cd icl
 chmod +x icl.sh
 ```
 
-### Initalize terraform (first run only)
-```bash
-cd terraform
-terraform init
-```
-
-
-### Create secrets.tfvars
+### Create secrets.tfvars (`touch secrets.tfvars`)
 
 ```secrets.tfvars
 # AWS Credentials
@@ -144,5 +137,6 @@ Some files, such as the Ansible inventory, are generated automatically by the ic
 
 - SSH Connection Issues: Ensure that your SSH key is correctly configured and that the security group allows inbound SSH traffic on port 22.
     - `ansible pce -i ansible/inventory/hosts -m ping -u ec2-user --private-key ~/.ssh/ssh-dev.pem`
+    - `ansible all -m ping`
 - AWS Permissions: Ensure that your AWS credentials have sufficient permissions to create and manage EC2 instances, security groups, and other resources.
 - Python Interpreter: If Ansible fails due to a Python version issue, verify that the correct interpreter path is specified in the PYTHON_INTERPRETER variable.
