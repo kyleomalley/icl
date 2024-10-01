@@ -59,19 +59,18 @@ start_infrastructure() {
 [pce_group]
 pce ansible_host=${PCE_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${KEY_PATH} ansible_python_interpreter=${PYTHON_INTERPRETER}
 
-[kubernetes_controller_group]
-controller ansible_host=${CONTROLLER_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${KEY_PATH} ansible_python_interpreter=${PYTHON_INTERPRETER}
+[k8s_controller_group]
+k8s_controller ansible_host=${CONTROLLER_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${KEY_PATH} ansible_python_interpreter=${PYTHON_INTERPRETER}
 
-[kubernetes_node_group]
-node ansible_host=${NODE_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${KEY_PATH} ansible_python_interpreter=${PYTHON_INTERPRETER}
+[k8s_worker_group]
+k8s_worker ansible_host=${NODE_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${KEY_PATH} ansible_python_interpreter=${PYTHON_INTERPRETER}
 EOL
 
   echo "Waiting for instances to finish ssh setup..."
   sleep 15
 
   echo "Running Ansible playbooks..."
-  ansible-playbook -i ansible/inventory/hosts ansible/playbooks/pce.yml
-  ansible-playbook -i ansible/inventory/hosts ansible/playbooks/kubernetes.yml
+  ansible-playbook -i ansible/inventory/hosts ansible/playbooks/setup_pce.server.yml
 
   echo "Infrastructure setup complete."
 }
@@ -94,11 +93,6 @@ unsuspend_infrastructure() {
   
   echo "Waiting for instances to finish ssh setup..."
   sleep 15
-
-  # Run the Ansible playbooks to ensure services are running after unsuspend
-  echo "Running Ansible playbooks to ensure services are running..."
-  ansible-playbook -i ansible/inventory/hosts ansible/playbooks/pce.yml
-  ansible-playbook -i ansible/inventory/hosts ansible/playbooks/kubernetes.yml
 }
 
 # Function to destroy the infrastructure
@@ -123,7 +117,7 @@ list_amis() {
 list_instances() {
   echo "Listing existing EC2 instances for project '$PROJECT_NAME'..."
   echo "------------------------------------------------------------------------------------------------------------------------------------------------"
-  echo "| Instance ID        | Instance Type | Public IP       | SSH Key      | Security Group    | Launch Time                | State    | Name              |"
+  echo "| Instance ID        | Instance Type | Public IP       | SSH Key      | Security Group    | Launch Time                | State    | Name       |"
   echo "------------------------------------------------------------------------------------------------------------------------------------------------"
   aws ec2 describe-instances \
     --filters "Name=tag:Project,Values=${PROJECT_NAME}" "Name=instance-state-name,Values=pending,running" \

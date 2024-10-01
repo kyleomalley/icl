@@ -1,0 +1,143 @@
+---
+- name: "Play 1 - Install"
+  hosts: pce
+  become: true
+  vars:
+    tinyproxy_config_file: "/etc/tinyproxy/tinyproxy.conf"
+    proxy_auth_file: "/etc/tinyproxy/htpasswd"  # File to store username/password for basic auth
+    username: "icl_proxy_user"
+    special_chars: ['\', '%', '$']  # Special characters that will need to be urlencoded and escaped properly for systemd configuration.
+    random_password: "{{ lookup('password', '/dev/null length=8 chars=ascii_letters,digits') }}"  # Generated password
+    proxy_port: 8080
+
+  tasks:
+    - name: Concatenate special characters to the password with double underscores to ensure snowflake password. 
+      set_fact:
+        concatenated_password: "{{ random_password }}__{{ special_chars | join('__') }}"
+
+    - name: Import the GPG key for EPEL
+      ansible.builtin.rpm_key:
+        state: present
+        key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+  
+    - name: Download the EPEL repository package
+      ansible.builtin.get_url:
+        url: https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+        dest: /tmp/epel-release-latest-9.noarch.rpm
+
+    - name: Install the EPEL repository
+      ansible.builtin.yum:
+        name: /tmp/epel-release-latest-9.noarch.rpm
+        state: present
+
+    - name: Install Tinyproxy
+      ansible.builtin.yum:
+        name: tinyproxy
+        state: present
+
+    - name: Install httpd-tools
+      ansible.builtin.yum:
+        name: httpd-tools
+        state: present
+
+    - name: Backup existing Tinyproxy config
+      ansible.builtin.command:
+        cmd: "cp {{ tinyproxy_config_file }} {{ tinyproxy_config_file }}.bak"
+      args:
+        creates: "{{ tinyproxy_config_file }}.bak"
+
+    - name: Configure Tinyproxy for basic authentication and listen on port 8080
+      ansible.builtin.blockinfile:
+        path: "{{ tinyproxy_config_file }}"
+        block: |
+          # Allow all connections (limit later by authenticated users only)
+          Allow 127.0.0.1
+          # Limit proxy to connections from internal EC2 IPs (Modify IP ranges as necessary)
+          Allow 10.0.0.0/8
+          # Enable Basic Authentication
+          BasicAuth {{ username }} {{ concatenated_password }}
+          # Set the Tinyproxy port
+          Port {{ proxy_port }}
+        create: yes
+
+    - name: Create htpasswd file for authentication
+      ansible.builtin.command:
+        cmd: "htpasswd -bc {{ proxy_auth_file }} {{ username }} {{ concatenated_password }}"
+
+    - name: Restart Tinyproxy service to apply changes
+      ansible.builtin.systemd:
+        name: tinyproxy
+        state: restarted
+        enabled: true
+
+    - name: Save proxy credentials to a file
+      ansible.builtin.copy:
+        content: |
+          PROXY_USER={{ username }}
+          PROXY_PASS={{ concatenated_password }}
+          PROXY_HOST={{ ansible_default_ipv4.address }}
+          PROXY_PORT={{ proxy_port }}
+        dest: "/etc/proxy_credentials"
+        mode: '0644'
+
+
+## Play 2
+- name: "Play 2 -- Distribute proxy config"
+  hosts: k8s_controller_group,k8s_worker_group
+  become: True
+  vars:
+      proxy_port: 8080
+  tasks:
+    - name: Copy proxy credential vars file from pce to k8s nodes
+      ansible.builtin.copy:
+        src: /etc/proxy_credentials
+        dest: /etc/proxy_credentials
+        remote_src: True
+      delegate_to: pce
+    - name: Load proxy credentials file content into memory
+      ansible.builtin.slurp:
+        src: /etc/proxy_credentials
+      register: proxy_credentials_raw
+      delegate_to: pce
+
+    - name: Decode and parse proxy credentials into variables
+      ansible.builtin.set_fact:
+        proxy_credentials_content: "{{ proxy_credentials_raw['content'] | b64decode | split('\n') }}"
+
+    - name: Debug variables (optional, to check without showing sensitive data)
+      ansible.builtin.debug:
+        msg:
+          - "{{ proxy_credentials_content }}"
+
+    - name: Extract individual proxy credentials from content
+      ansible.builtin.set_fact:
+        PROXY_USER: "{{ proxy_credentials_content | select('search', '^PROXY_USER=') | list | first | regex_replace('^PROXY_USER=', '') }}"
+        PROXY_PASS: "{{ proxy_credentials_content | select('search', '^PROXY_PASS=') | list | first | regex_replace('^PROXY_PASS=', '') }}"
+        PROXY_HOST: "{{ proxy_credentials_content | select('search', '^PROXY_HOST=') | list | first | regex_replace('^PROXY_HOST=', '') }}"
+
+    ###
+
+    - name: URL-encode the proxy password
+      set_fact:
+        urlencoded_password: "{{ PROXY_PASS | urlencode }}"
+
+    - name: Escape special characters for systemd configuration files.
+      set_fact:
+        escaped_password: "{{ urlencoded_password
+          | regex_replace('%', '%%') }}"           # Escape percent signs used in urlencoding, % is %25
+  
+    - name: Create systemd drop-in directory for containerd proxy configuration
+      ansible.builtin.file:
+        path: /etc/systemd/system/containerd.service.d
+        state: directory
+        mode: '0755'
+
+    - name: Add proxy configuration to containerd systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/containerd.service.d/http-proxy.conf
+        content: |
+          [Service]
+          Environment="HTTP_PROXY=http://{{ PROXY_USER }}:{{ escaped_password }}@{{ PROXY_HOST }}:{{ proxy_port }}"
+          Environment="HTTPS_PROXY=http://{{ PROXY_USER }}:{{ escaped_password }}@{{ PROXY_HOST }}:{{ proxy_port }}"
+          Environment="NO_PROXY=localhost,127.0.0.1"
+        mode: '0644'
