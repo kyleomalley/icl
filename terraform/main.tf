@@ -17,11 +17,6 @@ variable "security_group_name" {
   type        = string
 }
 
-variable "pce_iam_instance_profile" {
-  description = "The IAM instance profile ARN"
-  type        = string
-}
-
 variable "domain_name" {
   description = "The domain name to use for DNS records"
   type        = string
@@ -59,10 +54,9 @@ data "aws_ami" "rhel9" {
 
 resource "aws_instance" "pce" {
   ami           = data.aws_ami.rhel9.id
-  instance_type = "t3.micro"
+  instance_type = "t3.small"
   key_name      = var.key_name
   security_groups = [var.security_group_name]
-  iam_instance_profile = var.pce_iam_instance_profile
 
   tags = {
     Name    = "pce"
@@ -74,7 +68,7 @@ resource "aws_instance" "pce" {
 
 resource "aws_instance" "kubernetes_controller" {
   ami           = data.aws_ami.rhel9.id
-  instance_type = "t3.micro"
+  instance_type = "t3.small"
   key_name      = var.key_name
   security_groups = [var.security_group_name]
 
@@ -88,7 +82,7 @@ resource "aws_instance" "kubernetes_controller" {
 
 resource "aws_instance" "kubernetes_node" {
   ami           = data.aws_ami.rhel9.id
-  instance_type = "t3.micro"
+  instance_type = "t3.small"
   key_name      = var.key_name
   security_groups = [var.security_group_name]
 
