@@ -1,0 +1,224 @@
+---
+- hosts: k8s_controller_group, k8s_worker_group
+  become: true
+  tasks:
+
+    ###
+    # Disable swap
+    ###
+    - name: Disable swap (temporary)
+      ansible.builtin.command:
+        cmd: "swapoff -a"
+    
+    - name: Disable swap permanently
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^\s*swap\s+'
+        replace: '#swap'
+
+    ###
+    # Handle Networking
+    ###
+    - name: Create /etc/modules-load.d/containerd.conf file
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/containerd.conf
+        content: |
+          overlay
+          br_netfilter
+        mode: '0644'
+
+    - name: Load the overlay kernel module
+      ansible.builtin.command:
+          cmd: "modprobe overlay"
+      changed_when: false
+
+    - name: Load the br_netfilter kernel module
+      ansible.builtin.command:
+        cmd: "modprobe br_netfilter"
+      changed_when: false
+
+    - name: Ensure br_netfilter and overlay modules are loaded on boot
+      ansible.builtin.systemd:
+        name: systemd-modules-load.service
+        enabled: true
+        state: restarted
+
+    - name: Enable IP forwarding
+      ansible.builtin.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    - name: Persist IP forwarding setting across reboots
+      ansible.builtin.lineinfile:
+        path: /etc/sysctl.conf
+        regexp: '^net.ipv4.ip_forward'
+        line: 'net.ipv4.ip_forward = 1'
+
+    - name: Enable net.bridge.bridge-nf-call-iptables=1
+      ansible.builtin.sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    ### 
+    # Install Kubernetes https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management
+    ###
+    - name: Create the Kubernetes repo file     
+      ansible.builtin.copy:
+        dest: /etc/yum.repos.d/kubernetes.repo
+        content: |
+          [kubernetes]
+          name=Kubernetes
+          baseurl=https://pkgs.k8s.io/core:/stable:/v1.31/rpm/
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://pkgs.k8s.io/core:/stable:/v1.31/rpm/repodata/repomd.xml.key
+        mode: '0644'
+
+    - name: Update yum cache
+      ansible.builtin.yum:
+        name: '*'
+        state: latest
+        update_cache: yes
+
+    - name: Install dependencies and Kubernetes components
+      ansible.builtin.yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+          - iproute-tc
+          - containerd.io
+          - kubelet
+          - kubeadm
+          - kubectl
+          - socat
+          - bind-utils
+        state: present
+
+    - name: Ensure containerd config directory exists.
+      file:
+        path: /etc/containerd
+        state: directory
+      register: containerd_dir
+
+    - name: Get defaults from containerd.
+      command: containerd config default
+      register: containerd_config_default
+
+    # This could be removed later after more testing. This is a work around because I could not get ansible to actually append the output directly 
+    #(using unix redirect >), so it is being saved to /tmp, modified, then copied over, which works. May have been an issue with low cpu credits, rhel, not sure.
+    - name: Prepare containerd/config.toml from default config
+      copy:
+        dest: /tmp/containerd_config.toml
+        content: "{{ containerd_config_default.stdout }}"
+
+    - name: Set Cgroup driver to systemd
+      lineinfile:
+        insertafter: '.*\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]$'
+        line: '          SystemdCgroup = true'
+        state: present
+        path: /tmp/containerd_config.toml
+
+    - name: Make sure  SystemdCgroup = false is not set
+      ansible.builtin.lineinfile:
+        path: /tmp/containerd_config.toml
+        state: absent
+        line: '            SystemdCgroup = false'
+
+    - name: Copy config.toml to /etc/containerd
+      copy:
+        remote_src: true
+        src: /tmp/containerd_config.toml
+        dest: /etc/containerd/config.toml
+
+    - name: Enable and start containerd service
+      ansible.builtin.systemd:
+        name: containerd
+        enabled: true
+        state: started
+
+    ###
+    # Enable kubelet
+    ###
+    - name: Enable kubelet service
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: yes
+
+    # Reload Systemd Daemon
+    - name: Reload systemd to apply changes
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Start kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        state: started
+    
+
+- hosts: k8s_controller
+  become: true
+  tasks:
+
+    - name: Pull required container images for kubeadm
+      ansible.builtin.shell: kubeadm config images pull
+
+    - name: Initialize the Kubernetes controller node
+      ansible.builtin.shell: |
+        kubeadm init --pod-network-cidr=10.244.0.0/16 --cri-socket unix:///run/containerd/containerd.sock
+      args:
+        creates: /etc/kubernetes/admin.conf
+  
+    # Ensure the KUBECONFIG is set for Ansible to use kubectl
+    - name: Set KUBECONFIG environment variable for Ansible
+      lineinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        regexp: '^export KUBECONFIG='
+        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+        state: present
+        create: yes
+
+    # Apply the KUBECONFIG so kubectl can be used by Ansible in this session
+    - name: Source KUBECONFIG to current environment
+      shell: "export KUBECONFIG=/etc/kubernetes/admin.conf"
+      args:
+        executable: /bin/bash
+
+    - name: Install Flannel CNI network
+      ansible.builtin.shell: |
+        kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      tags: install_flannel
+
+    # Generate kubeadm join token
+    - name: Generate kubeadm join token
+      shell: kubeadm token create --print-join-command
+      register: kubeadm_join_command
+
+    # Output join command for debug (optional)
+    - name: Output join command
+      debug:
+        msg: "{{ kubeadm_join_command.stdout }}"
+
+    # Set a fact so that it can be used in the next play
+    - name: Set the kubeadm join command as a fact
+      set_fact:
+        kubeadm_join_command_fact: "{{ kubeadm_join_command.stdout }}"
+
+
+- hosts: k8s_worker_group
+  become: true
+  tasks:
+
+    # Join the node to the Kubernetes cluster using the command from the control plane
+    - name: Join the worker node to the Kubernetes cluster
+      shell: "{{ hostvars['k8s_controller']['kubeadm_join_command_fact'] }}"
+      args:
+        executable: /bin/bash

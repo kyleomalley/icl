@@ -1,0 +1,25 @@
+---
+- name: "Install awscli via amazonaws.com hosted .zip. Used as a workaround when awscli package is broken from repos"
+  hosts: all
+  become: true
+
+  tasks:
+  - name: Download AWS CLI v2 installer
+    ansible.builtin.get_url:
+      url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+      dest: /tmp/awscliv2.zip
+
+  - name: Unzip AWS CLI v2 installer
+    ansible.builtin.unarchive:
+      src: /tmp/awscliv2.zip
+      dest: /tmp
+      remote_src: yes
+
+  - name: Install AWS CLI v2
+    ansible.builtin.command:
+      cmd: /tmp/aws/install
+      creates: /usr/local/bin/aws
+
+  - name: Verify AWS CLI version
+    ansible.builtin.command:
+      cmd: aws --version
