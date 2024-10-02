@@ -9,6 +9,7 @@
     special_chars: ['\', '%', '$']  # Special characters that will need to be urlencoded and escaped properly for systemd configuration.
     random_password: "{{ lookup('password', '/dev/null length=8 chars=ascii_letters,digits') }}"  # Generated password
     proxy_port: 8080
+    aws_vpc_network: "172.31.0.0/16"
 
   tasks:
     - name: Concatenate special characters to the password with double underscores to ensure snowflake password. 
@@ -52,8 +53,8 @@
         block: |
           # Allow all connections (limit later by authenticated users only)
           Allow 127.0.0.1
-          # Limit proxy to connections from internal EC2 IPs (Modify IP ranges as necessary)
-          Allow 10.0.0.0/8
+          # Limit proxy to connections from internal EC2 IPs.
+          Allow {{ aws_vpc_network }}
           # Enable Basic Authentication
           BasicAuth {{ username }} {{ concatenated_password }}
           # Set the Tinyproxy port

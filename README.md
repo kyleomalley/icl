@@ -8,8 +8,8 @@ Running `./icl.sh start` will produce the following:
 - Automates creating three ec2 nodes, `pce`, `kubernetes-controller`, `kubernetes-worker`
 - Uses Route53 to assign DNS entries (Completed)
 - Configures and stores publicly trusted TLS certificates on each node. (WIP)
-- Configures an outbound HTTP Proxy (Tinyproxy) on `pce` for use by the Kubernetes cluster nodes. (WIP)
-- Configures Kubernetes and configures outbound proxy. (WIP)
+- Configures an outbound HTTP Proxy (Tinyproxy) on `pce` for use by the Kubernetes cluster nodes. (Completed)
+- Configures Kubernetes and configures outbound proxy. (Completed)
 - Launches a simple "Hello World" container app. (Not started)
 
 Additionally,`icl.sh` should be able to `destroy`, `suspend` and `unsuspend` all created nodes. (Completed)
