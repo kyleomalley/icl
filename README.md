@@ -20,10 +20,10 @@ Additionally,`icl.sh` should be able to `destroy`, `suspend` and `unsuspend` all
 graph TB;
     AC{{Linux Workstation}} -. "AWS API (Terraform)" .-> AWS((AWS));
     AC -- "SSH (Ansible) & HTTPS" --> SG{{"*AWS Security Group*"}};
+    AC --> LetsEncrypt[LetsEncrypt];
 
-    S3[S3] --> AWS;
-    Route53[Route53] --> AWS;
-    Cert[Cert Manager] --> AWS;
+    S3[S3] <--> AWS;
+    Route53[Route53] <--> AWS;
 
     AWS --> AWS_Instances(AWS Subgraph);
 
