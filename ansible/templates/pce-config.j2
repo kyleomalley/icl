@@ -1,0 +1,21 @@
+# https://docs.illumio.com/core/21.2/Content/Guides/pce-install-upgrade/reference/reference-pce-runtime-parameters.htm
+install_root: "/opt/illumio-pce"
+runtime_data_root: "/var/lib/illumio-pce/runtime"
+persistent_data_root: "/var/lib/illumio-pce/data"
+ephemeral_data_root: "/var/lib/illumio-pce/tmp"
+log_dir: "/var/log/illumio-pce"
+private_key_cache_dir: "/var/lib/illumio-pce/keys"
+pce_fqdn: {{ pce_fqdn }}
+login_banner: TEST TEST
+service_discovery_fqdn: {{ service_discovery_fqdn }}
+cluster_public_ips:
+  cluster_fqdn:
+  - {{ cluster_fqdn }}
+node_type: snc0
+datacenter: us-west-2
+front_end_management_https_port: 9443
+web_service_private_key: "/var/lib/illumio-pce/cert/server.key"
+web_service_certificate: "/var/lib/illumio-pce/cert/server.crt"
+email_address: {{ admin_email_address }}
+service_discovery_encryption_key: {{ service_discovery_encryption_key }}
+insecure_tls_weak_ciphers_enabled: false

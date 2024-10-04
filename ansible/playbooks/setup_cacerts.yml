@@ -1,11 +1,10 @@
 ---
-- hosts: all
+- hosts: pce
   become: true
   vars:
-    domain_name: "aws.fivetuple.com"  # Replace with your domain
-    email: "anonymous@aws.fivetuple.com"  # Email for LetsEncrypt notifications
-    certs_dir: "/etc/pki/tls/"
-    hosted_zone_id: "Z0158254IAVI6K6BNSO2"  # Replace with your Route 53 hosted zone ID
+      secrets_file: "../../secrets.tfvars"
+      domain_name: "{{ (lookup('file', secrets_file) | regex_search('domain_name\\s*=\\s*\"(.*?)\"', '\\1')) | first }}"
+      fqdn: "{{ inventory_hostname }}.{{ domain_name }}"
 
   tasks:
     - name: Install Certbot and Route 53 plugin using yum
@@ -16,35 +15,32 @@
         state: present
       tags: install
 
-    - name: Create directory for SSL certificates
-      ansible.builtin.file:
-        path: "{{ certs_dir }}"
-        state: directory
-        mode: '0755'
+    - name: Display the fqdn
+      debug:
+        msg: "The requesting cert for: {{ fqdn }}"
+      tags: obtain_cert
 
     - name: Obtain Let's Encrypt certificate using DNS challenge (Route 53)
       ansible.builtin.command:
         cmd: >
           certbot certonly --dns-route53
-          -d {{ domain_name }}
+          -d {{ fqdn }}
           --non-interactive
           --agree-tos
-          --email {{ email }}
-          --dns-route53-propagation-seconds 30
-        tags: obtain_cert
+          --email "anonymous@anonymous.com"
+          --key-type rsa
+      tags: obtain_cert
 
-    - name: Copy fullchain certificate to Nginx SSL directory
-      ansible.builtin.copy:
-        src: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
-        dest: "{{ certs_dir }}cert.pem"
+    - name: Copy Let's Encrypt root certificate to system trust store
+      copy:
+        src: "/etc/letsencrypt/live/{{ fqdn }}/chain.pem"
+        dest: /etc/pki/ca-trust/source/anchors/letsencrypt-root.crt
         owner: root
         group: root
         mode: '0644'
+        remote_src: yes
+      tags: update_trust
 
-    - name: Copy private key to Nginx SSL directory
-      ansible.builtin.copy:
-        src: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
-        dest: "{{ certs_dir }}key.pem"
-        owner: root
-        group: root
-        mode: '0600'
+    - name: Update the CA trust store to include the new certificate
+      command: update-ca-trust
+      tags: update_trust

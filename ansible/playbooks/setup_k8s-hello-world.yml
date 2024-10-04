@@ -1,0 +1,61 @@
+---
+- name: Deploy Hello World on Kubernetes and perform port-forwarding
+  hosts: k8s_controller_group
+  become: true
+  tasks:
+    - name: Create Kubernetes Deployment for Hello World
+      kubernetes.core.k8s:
+        definition: |
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: hello-world
+            labels:
+              app: hello-world
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: hello-world
+            template:
+              metadata:
+                labels:
+                  app: hello-world
+              spec:
+                containers:
+                - name: hello-world
+                  image: nginxdemos/hello
+                  ports:
+                  - containerPort: 8443
+        state: present
+        kubeconfig: /etc/kubernetes/admin.conf
+        namespace: hello-world
+
+    - name: Create Kubernetes Service for Hello World
+      kubernetes.core.k8s:
+        definition: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: hello-world-service
+          spec:
+            selector:
+              app: hello-world
+            ports:
+            - protocol: TCP
+              port: 8443
+              targetPort: 8443
+            type: ClusterIP
+        state: present
+        kubeconfig: /etc/kubernetes/admin.conf
+        namespace: hello-world
+
+    - name: Wait for the Hello World pod to be ready
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: hello-world
+        label_selectors:
+          - app=hello-world
+      register: pod_info
+      until: pod_info.resources[0].status.phase == "Running"
+      retries: 10
