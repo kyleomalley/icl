@@ -7,10 +7,17 @@ Running `./icl.sh start` will produce the following:
 
 - Automates creating three ec2 nodes, `pce`, `kubernetes-controller`, `kubernetes-worker`
 - Uses Route53 to assign DNS entries (Completed)
-- Configures and stores publicly trusted TLS certificates on each node. (WIP)
+- Configures and stores publicly trusted TLS certificates on each node. (Completed)
 - Configures an outbound HTTP Proxy (Tinyproxy) on `pce` for use by the Kubernetes cluster nodes. (Completed)
 - Configures Kubernetes and configures outbound proxy. (Completed)
-- Launches a simple "Hello World" container app. (Not started)
+- Launches a simple "Hello World" container app. (Completed)
+- Ansible playbook to launch a single node PCE Cluster (Completed)
+- Automate creating AWS IAM Policy and Attaching roles to EC2 instances (or distribute aws configuration). 
+
+Cavaets:
+ - Requires a significant configuration on AWS for network security rules, ec2 roles (for S3 and Route53 changes).
+ - Configuration (secrets) file is a WIP and should be moved to something more reasonable, probably Amazon Vault or a local vault store.
+ - Most of the opinionated (non-default / non-best practice) decisions were made to maximize compatibility with specific software (e.g using RSA certificates). 
 
 
 Additionally,`icl.sh` should be able to `destroy`, `suspend` and `unsuspend` all created nodes. (Completed)
@@ -39,7 +46,7 @@ graph TB;
 ```
 ## Secondary Goals:
  - Include Ansible Playbooks to install various container-based services.
-    - Illumio PCE. (WIP)
+    - Illumio PCE. (Working, minus initial user account creation)
 
 ## Prerequisites
 
@@ -55,7 +62,7 @@ graph TB;
 - An existing SSH key pair in AWS (e.g., `ssh-dev`)
 - An existing security group in AWS (e.g. `ilo-dev`)
 - An AWS IAM Account with appropriate permissions policy applied.
-    - See `aws-iam-policy-simple.json` example Access Management Policy
+    - See `aws-iam-policy-simple.json` example Access Management Policy. This is unlikely to be up-to-date.
     - Configure with: `aws configure`
 ## Setup Instructions
 
