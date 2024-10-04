@@ -6,17 +6,29 @@
     s3_bucket: "{{ (lookup('file', secrets_file) | regex_search('s3_bucket\\s*=\\s*\"(.*?)\"', '\\1')) | first }}"
     pce_rpm: "{{ (lookup('file', secrets_file) | regex_search('pce_rpm\\s*=\\s*\"(.*?)\"', '\\1')) | first }}"
     pce_ui_rpm: "{{ (lookup('file', secrets_file) | regex_search('pce_ui_rpm\\s*=\\s*\"(.*?)\"', '\\1')) | first }}"
+    domain_name: "{{ (lookup('file', secrets_file) | regex_search('domain_name\\s*=\\s*\"(.*?)\"', '\\1')) | first }}"
     rpm_dest_dir: "/tmp/illumio_rpm"  # Remote directory on the PCE nodes
+    fqdn: "{{ inventory_hostname }}.{{ domain_name }}"
+    service_discovery_fqdn: "{{ fqdn }}"
+    pce_fqdn: "{{ fqdn }}"
     signing_key_file: "illumio.signingkey"
+    admin_email_address: "anonymous@anonymous.com"
+    service_discovery_encryption_key: "{{ (lookup('file', secrets_file) | regex_search('service_discovery_encryption_key\\s*=\\s*\"(.*?)\"', '\\1')) | first }}"
+    cluster_fqdn: "{{ ansible_default_ipv4.address }}"
 
   tasks:
     - name: Debug s3_bucket value
       ansible.builtin.debug:
         msg: "Using S3 bucket {{ s3_bucket }}"
 
-    - name: Install pip (Python package manager) if not already present
+    - name: Install required packages.
       ansible.builtin.yum:
-        name: python3-pip
+        name: 
+          - python3-pip
+          - curl
+          - wget
+          - java
+          - iptables
         state: present
 
     - name: Install AWS CLI via pip
@@ -59,27 +71,57 @@
       delay: 10
       until: download_pce_ui_rpm is succeeded
 
-    - name: Install Illumio PCE package on the PCE nodes
-      ansible.builtin.yum:
-        name: "{{ rpm_dest_dir }}/{{ pce_rpm }}"
-        state: present
-      notify: restart_illumio_pce
-
     - name: Install Illumio PCE UI package on the PCE nodes
       ansible.builtin.yum:
         name: "{{ rpm_dest_dir }}/{{ pce_ui_rpm }}"
         state: present
       notify: restart_illumio_pce_ui
+    
+    - name: Ensure the directory for PCE configuration exists
+      file:
+        path: /opt/illumio_pce/etc/
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
-  handlers:
-    - name: restart_illumio_pce
-      ansible.builtin.systemd:
+    - name: Create the PCE configuration file
+      template:
+        src: ../templates/pce-config.j2
+        dest: /opt/illumio_pce/etc/pce.env
+      tags: gen_pce_config
+
+    # Handle linking certs
+    - name: Ensure the cert directory exists
+      file:
+        path: /var/lib/illumio-pce/cert/
+        state: directory
+      tags: gen_pce_config
+
+    - name: Copy cert.pem to server.crt
+      copy:
+        src: /etc/letsencrypt/live/pce.aws.fivetuple.com/cert.pem
+        dest: /var/lib/illumio-pce/cert/server.crt
+        owner: ilo-pce
+        group: ilo-pce
+        mode: '0400'
+        follow: yes  # Follow symlinks to copy the actual file
+        remote_src: yes
+      tags: gen_pce_config
+
+    - name: Copy privkey.pem to server.key
+      copy:
+        src: /etc/letsencrypt/live/pce.aws.fivetuple.com/privkey.pem
+        dest: /var/lib/illumio-pce/cert/server.key
+        owner: ilo-pce
+        group: ilo-pce
+        mode: '0400'
+        follow: yes  # Follow symlinks to copy the actual file
+        remote_src: yes
+      tags: gen_pce_config
+
+    - name: Start Illumio PCE services
+      systemd:
         name: illumio-pce
-        state: restarted
-        enabled: true
-
-    - name: restart_illumio_pce_ui
-      ansible.builtin.systemd:
-        name: illumio-pce-ui
-        state: restarted
+        state: started
         enabled: true
